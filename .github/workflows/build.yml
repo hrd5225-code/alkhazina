@@ -1,5 +1,8 @@
 name: Build APK
 
+permissions:
+  contents: write
+
 on:
   workflow_dispatch:
   push:
@@ -69,6 +72,22 @@ jobs:
 
       - name: Add Android platform
         run: npx cap add android
+
+      - name: Fixed signing key and version number (so new builds install over old ones)
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f signing/debug.keystore ]; then
+            mkdir -p signing
+            keytool -genkeypair -keystore signing/debug.keystore -storetype JKS -alias androiddebugkey -storepass android -keypass android -keyalg RSA -keysize 2048 -validity 36500 -dname "CN=Android Debug,O=Android,C=US"
+            git config user.name "github-actions"
+            git config user.email "github-actions@users.noreply.github.com"
+            git add signing/debug.keystore
+            git commit -m "Add fixed signing key"
+            git push origin HEAD:refs/heads/${{ github.ref_name }}
+          fi
+          cp signing/debug.keystore ~/.android/debug.keystore
+          sed -i "s/versionCode 1/versionCode ${{ github.run_number }}/" android/app/build.gradle
+          grep -n "versionCode" android/app/build.gradle
 
       - name: Generate app icons
         continue-on-error: true
