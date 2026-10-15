@@ -1,0 +1,8 @@
+{
+  "appId": "com.alkhazina.app",
+  "appName": "الخزينة",
+  "webDir": "www",
+  "server": { "androidScheme": "https" },
+  "plugins": { "CapacitorHttp": { "enabled": true } },
+  "android": { "backgroundColor": "#0F2236" }
+}
