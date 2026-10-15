@@ -23,6 +23,50 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Prepare web files (fonts, libraries, icons)
+        run: |
+          mkdir -p www/fonts www/lib assets tmpdeps
+          if [ -f index.html ] && [ ! -f www/index.html ]; then mv index.html www/index.html; fi
+          test -f www/index.html
+          cd tmpdeps
+          npm init -y > /dev/null
+          npm i @fontsource/ibm-plex-sans-arabic @fontsource/el-messiri html2canvas@1.4.1 jspdf@2.5.1 --no-audit --no-fund
+          cd ..
+          cp tmpdeps/node_modules/html2canvas/dist/html2canvas.min.js www/lib/
+          cp tmpdeps/node_modules/jspdf/dist/jspdf.umd.min.js www/lib/
+          python3 - <<'PY'
+          import re, shutil
+          NM = 'tmpdeps/node_modules/@fontsource'
+          out = []
+          def take(pkg, weights):
+              for w in weights:
+                  css = open(f'{NM}/{pkg}/{w}.css', encoding='utf-8').read()
+                  for blk in re.findall(r'/\*.*?\*/\s*@font-face\s*\{.*?\}', css, flags=re.S):
+                      name = re.search(r'/\*\s*(\S+)\s*\*/', blk).group(1)
+                      if not re.search(r'-(arabic|latin)-\d+-normal$', name):
+                          continue
+                      f = name + '.woff2'
+                      blk = re.sub(r'src:[^;]+;', 'src: url(fonts/' + f + ') format("woff2");', blk)
+                      out.append(re.sub(r'/\*.*?\*/\s*', '', blk, count=1))
+                      shutil.copy(f'{NM}/{pkg}/files/{f}', 'www/fonts/' + f)
+          take('ibm-plex-sans-arabic', [400, 500, 600])
+          take('el-messiri', [500, 700])
+          open('www/fonts.css', 'w', encoding='utf-8').write('\n'.join(out))
+          PY
+          cat > mkicons.js <<'JS'
+          const sharp = require('sharp');
+          const art = '<g fill="none" stroke="#D5AE5A"><rect x="132" y="132" width="760" height="760" rx="150" stroke-width="34"/><circle cx="512" cy="512" r="190" stroke-width="34"/><path d="M512 277V212M512 747V812M277 512H212M747 512H812" stroke-width="30"/></g><circle cx="512" cy="512" r="46" fill="#D5AE5A"/>';
+          const wrap = (inner) => Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">' + inner + '</svg>');
+          const bg = '<rect width="1024" height="1024" fill="#0F2236"/>';
+          (async () => {
+            await sharp(wrap(bg + art)).png().toFile('assets/icon-only.png');
+            await sharp(wrap('<g transform="translate(512 512) scale(0.62) translate(-512 -512)">' + art + '</g>')).png().toFile('assets/icon-foreground.png');
+            await sharp(wrap(bg)).png().toFile('assets/icon-background.png');
+          })();
+          JS
+          node mkicons.js
+          ls -R www | head -40
+
       - name: Add Android platform
         run: npx cap add android
 
